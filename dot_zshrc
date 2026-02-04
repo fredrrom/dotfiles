@@ -1,0 +1,72 @@
+# ---------- History / keys ----------
+HISTFILE=~/.histfile
+HISTSIZE=10000
+SAVEHIST=10000
+setopt HIST_IGNORE_ALL_DUPS SHARE_HISTORY INC_APPEND_HISTORY
+bindkey -v
+
+# ---------- Completion ----------
+autoload -Uz compinit
+compinit
+zstyle ':completion:*' menu select
+zstyle ':completion:*' matcher-list 'm:{a-zA-Z}={A-Za-z}'
+
+# ---------- zinit ----------
+source ~/.local/share/zinit/zinit.git/zinit.zsh
+zinit light zsh-users/zsh-autosuggestions
+zinit light zsh-users/zsh-syntax-highlighting
+zinit light Aloxaf/fzf-tab
+
+# ---------- fzf ----------
+source /usr/share/fzf/key-bindings.zsh
+source /usr/share/fzf/completion.zsh
+export FZF_DEFAULT_COMMAND='fd --hidden --follow --exclude .git'
+export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
+export FZF_ALT_C_COMMAND='fd --type d --hidden --follow --exclude .git'
+
+# ---------- Useful defaults ----------
+export EDITOR=nvim
+alias grep="rg"
+
+# ---------- functions ----------
+# v: open a file from cwd
+v() {
+local f
+f="$(fd --type f --hidden --exclude .git | fzf)"
+[[ -n "$f" ]] && nvim "$f"
+}
+
+
+# cf: open a config file (~/.config + top-level dotfiles)
+cf() {
+local f
+f="$(
+fd --type f --hidden --exclude .git . "${XDG_CONFIG_HOME:-$HOME/.config}" \
+| sed "s|^$HOME/|~/|" \
+| fzf
+)"
+[[ -n "$f" ]] && nvim "${f/#\~/$HOME}"
+}
+
+
+# vg: grep -> open at line
+vg() {
+local sel file line
+sel="$(rg --line-number --no-heading --smart-case "$*" | fzf)" || return
+file="${sel%%:*}"
+line="${sel#*:}"; line="${line%%:*}"
+nvim +"$line" "$file"
+}
+
+# ---------- tmux ----------
+if [[ -z "$TMUX" && -n "$PS1" ]]; then
+  tmux attach -t main 2>/dev/null || tmux new -s main
+fi
+
+# ---------- SSH agent socket ----------
+export SSH_AUTH_SOCK="$XDG_RUNTIME_DIR/ssh-agent.socket"
+
+. "$HOME/.local/bin/env"
+
+# opencode
+export PATH="$HOME/.opencode/bin:$PATH"
