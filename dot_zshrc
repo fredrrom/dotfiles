@@ -29,6 +29,13 @@ export EDITOR=nvim
 alias grep="rg"
 
 # ---------- functions ----------
+# fcd: fuzzy cd
+fcd() {
+  local dir
+  dir=$(fd -t d . ${1:-.} | fzf) || return
+  cd "$dir"
+}
+
 # v: open a file from cwd
 v() {
 local f
@@ -60,7 +67,11 @@ nvim +"$line" "$file"
 
 # ---------- tmux ----------
 if [[ -z "$TMUX" && -n "$PS1" ]]; then
-  tmux attach -t main 2>/dev/null || tmux new -s main
+  if tmux ls >/dev/null 2>&1; then
+    tmux attach \; choose-tree -Zs
+  else
+    tmux new -s main
+  fi
 fi
 
 # ---------- SSH agent socket ----------
@@ -68,5 +79,13 @@ export SSH_AUTH_SOCK="$XDG_RUNTIME_DIR/ssh-agent.socket"
 
 . "$HOME/.local/bin/env"
 
+# lean
+if [[ -f "$HOME/.elan/env" ]]; then
+  source "$HOME/.elan/env"
+fi
+
 # opencode
 export PATH="$HOME/.opencode/bin:$PATH"
+
+# npm
+export PATH="$HOME/.local/npm-global/bin:$PATH"

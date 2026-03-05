@@ -124,6 +124,21 @@ require("lazy").setup({
     "numtostr/comment.nvim",
     opts = {},
   },
+  -- lean
+  {
+    "Julian/lean.nvim",
+    event = { "BufReadPre *.lean", "BufNewFile *.lean" },
+    dependencies = {
+      "neovim/nvim-lspconfig",
+      "nvim-lua/plenary.nvim",
+    },
+    opts = {
+      mappings = true,
+      infoview = {
+        autoopen = true,
+      },
+    },
+  },
   -- fzf-lua (files / grep)
   {
     "ibhagwan/fzf-lua",
@@ -138,15 +153,58 @@ require("lazy").setup({
         },
       })
 
-      vim.keymap.set("n", "<leader>ff", fzf.files, { desc = "find files (cwd)" })
-      vim.keymap.set("n", "<leader>fh", function()
-        fzf.files({ cwd = vim.fn.expand("~") })
-      end, { desc = "find files (home)" })
-
-      vim.keymap.set("n", "<leader>fg", fzf.live_grep, { desc = "live grep" })
-      vim.keymap.set("n", "<leader>fb", fzf.buffers,   { desc = "buffers" })
-      vim.keymap.set("n", "<leader>fr", fzf.oldfiles,  { desc = "recent files" })
-      vim.keymap.set("n", "<leader>fc", fzf.commands,  { desc = "commands" })
+      vim.keymap.set("n", "<C-p>", fzf.files, { desc = "Find files" })
+      vim.keymap.set("n", "<leader>fg", fzf.live_grep, { desc = "Live grep" })
+      vim.keymap.set("n", "<leader><leader>", fzf.buffers, { desc = "Buffers" })
+      vim.keymap.set("n", "<leader>fo", fzf.oldfiles, { desc = "Recent files" })
+      vim.keymap.set("n", "<leader>r", fzf.resume, { desc = "Resume picker" })
+      vim.keymap.set("n", "gd", fzf.lsp_definitions, { desc = "Go to definition" })
+      vim.keymap.set("n", "gr", fzf.lsp_references, { desc = "Go to references" })
+    end,
+  },
+  {
+    "stevearc/oil.nvim",
+    dependencies = { "nvim-tree/nvim-web-devicons" },
+    opts = {
+      default_file_explorer = true,
+      view_options = { show_hidden = true },
+      skip_confirm_for_simple_edits = true,
+      keymaps = {
+        ["<C-v>"] = { "actions.select", opts = { vertical = true } },
+        ["<C-s>"] = { "actions.select", opts = { horizontal = true } },
+        ["<C-t>"] = { "actions.select", opts = { tab = true } },
+      },
+    },
+    config = function(_, opts)
+      require("oil").setup(opts)
+      vim.keymap.set("n", "-", "<cmd>Oil<cr>", { desc = "Oil" })
+    end,
+  },
+  {
+    "lewis6991/gitsigns.nvim",
+    opts = {
+      current_line_blame = false,
+    },
+    config = function(_, opts)
+      require("gitsigns").setup(opts)
+      vim.keymap.set("n", "]h", "<cmd>Gitsigns next_hunk<cr>", { desc = "Next hunk" })
+      vim.keymap.set("n", "[h", "<cmd>Gitsigns prev_hunk<cr>", { desc = "Prev hunk" })
+      vim.keymap.set("n", "<leader>hs", "<cmd>Gitsigns stage_hunk<cr>", { desc = "Stage hunk" })
+      vim.keymap.set("n", "<leader>hr", "<cmd>Gitsigns reset_hunk<cr>", { desc = "Reset hunk" })
+      vim.keymap.set("n", "<leader>hb", "<cmd>Gitsigns blame_line<cr>", { desc = "Blame line" })
+    end,
+  },
+  { "sindrets/diffview.nvim" },
+  {
+    "NeogitOrg/neogit",
+    dependencies = {
+      "nvim-lua/plenary.nvim",
+      "sindrets/diffview.nvim",
+    },
+    config = function()
+      require("neogit").setup({})
+      vim.keymap.set("n", "<leader>gg", "<cmd>Neogit<cr>", { desc = "Neogit" })
+      vim.keymap.set("n", "<leader>gd", "<cmd>DiffviewOpen<cr>", { desc = "Diffview" })
     end,
   },
   -- opencode (NickvanDyke)
@@ -160,11 +218,6 @@ require("lazy").setup({
       vim.g.opencode_opts = {
         provider = {
           enabled = "tmux",
-          tmux = {
-            options = "-h",
-            focus = true,
-            allow_passthrough = false,
-          },
         },
       }
 
