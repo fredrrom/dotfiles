@@ -12,14 +12,29 @@ zstyle ':completion:*' menu select
 zstyle ':completion:*' matcher-list 'm:{a-zA-Z}={A-Za-z}'
 
 # ---------- zinit ----------
-source ~/.local/share/zinit/zinit.git/zinit.zsh
+ZINIT_HOME="${XDG_DATA_HOME:-${HOME}/.local/share}/zinit/zinit.git"
+[ ! -d $ZINIT_HOME ] && mkdir -p "$(dirname $ZINIT_HOME)"
+[ ! -d $ZINIT_HOME/.git ] && git clone https://github.com/zdharma-continuum/zinit.git "$ZINIT_HOME"
+source "${ZINIT_HOME}/zinit.zsh"
+autoload -Uz _zinit
+(( ${+_comps} )) && _comps[zinit]=_zinit
 zinit light zsh-users/zsh-autosuggestions
 zinit light zsh-users/zsh-syntax-highlighting
 zinit light Aloxaf/fzf-tab
 
-# ---------- fzf ----------
+# ---------- OS-specific ----------
+{{ if eq .chezmoi.os "darwin" }}
+# fzf (Homebrew default)
+source "$(brew --prefix)/opt/fzf/shell/key-bindings.zsh"
+source "$(brew --prefix)/opt/fzf/shell/completion.zsh"
+{{ else if eq .chezmoi.os "linux" }}
+# fzf (system)
 source /usr/share/fzf/key-bindings.zsh
 source /usr/share/fzf/completion.zsh
+# SSH agent socket
+export SSH_AUTH_SOCK="${XDG_RUNTIME_DIR:-/run/user/$UID}/ssh-agent.socket"
+. "$HOME/.local/bin/env"
+{{ end }}
 export FZF_DEFAULT_COMMAND='fd --hidden --follow --exclude .git'
 export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
 export FZF_ALT_C_COMMAND='fd --type d --hidden --follow --exclude .git'
@@ -74,9 +89,6 @@ if [[ -z "$TMUX" && -n "$PS1" ]]; then
   fi
 fi
 
-# ---------- SSH agent socket ----------
-export SSH_AUTH_SOCK="$XDG_RUNTIME_DIR/ssh-agent.socket"
-
 . "$HOME/.local/bin/env"
 
 # lean
@@ -86,6 +98,7 @@ fi
 
 # opencode
 export PATH="$HOME/.opencode/bin:$PATH"
+export PATH="$HOME/.local/bin:$PATH"
 
 # npm
 export PATH="$HOME/.local/npm-global/bin:$PATH"

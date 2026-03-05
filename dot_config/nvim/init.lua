@@ -48,13 +48,13 @@ vim.lsp.config("lua_ls", {
 })
 
 vim.lsp.config("ty", {
-  cmd = { "ty", "server" },
+  cmd = { "uvx", "ty", "server" },
   filetypes = { "python" },
   root_markers = { ".git", "pyproject.toml" },
 })
 
 vim.lsp.config("ruff", {
-  cmd = { 'ruff', 'server' },
+  cmd = { 'uvx', 'ruff', 'server' },
   filetypes = { 'python' },
   root_markers = { 'pyproject.toml', 'ruff.toml', '.ruff.toml', '.git' },
   settings = {},
@@ -122,6 +122,26 @@ require("lazy").setup({
   -- comments
   {
     "numtostr/comment.nvim",
+    opts = {},
+  },
+  -- icons
+  {
+    "nvim-tree/nvim-web-devicons",
+    lazy = true,
+  },
+  -- treesitter (markdown parsers)
+  {
+    "nvim-treesitter/nvim-treesitter",
+    build = ":TSUpdate",
+    opts = {
+      ensure_installed = { "markdown", "markdown_inline", "yaml", "html", "latex" },
+    },
+  },
+  -- inline markdown rendering
+  {
+    "MeanderingProgrammer/render-markdown.nvim",
+    ft = { "markdown" },
+    dependencies = { "nvim-tree/nvim-web-devicons" },
     opts = {},
   },
   -- lean

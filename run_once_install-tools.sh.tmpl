@@ -1,0 +1,121 @@
+#!/bin/bash
+# Install tools on macOS and Linux
+# This script runs once when chezmoi is applied
+
+set -e
+
+echo "🔧 Installing tools..."
+
+{{ if eq .chezmoi.os "darwin" -}}
+# macOS installation via Homebrew
+echo "📦 Detected macOS - using Homebrew"
+
+# Check if Homebrew is installed
+if ! command -v brew &> /dev/null; then
+    echo "⚠️  Homebrew not found. Installing Homebrew..."
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+fi
+
+# Install/update packages from Brewfile
+if [ -f ~/Brewfile ]; then
+    echo "📦 Installing packages from Brewfile..."
+    brew bundle --file=~/Brewfile 
+    echo "✅ Homebrew packages installed"
+else
+    echo "⚠️  Brewfile not found at ~/Brewfile"
+fi
+
+{{ else if eq .chezmoi.os "linux" -}}
+# Linux installation
+echo "🐧 Detected Linux - detecting package manager..."
+
+packages_file=~/Packages
+
+if [ ! -f "$packages_file" ]; then
+    echo "⚠️  Packages file not found at $packages_file"
+else
+    # Simple package name mapping for distro differences
+    map_pkg() {
+        case "$1" in
+            "fd") [[ "$2" == "apt" || "$2" == "dnf" ]] && echo "fd-find" || echo "fd" ;;
+            "build-essential")
+                case "$2" in
+                    "apt") echo "build-essential" ;;
+                    "dnf"|"zypper") echo "gcc gcc-c++ make" ;;
+                    "pacman") echo "base-devel" ;;
+                esac ;;
+            "fonts-jetbrains-mono")
+                case "$2" in
+                    "apt"|"zypper") echo "fonts-jetbrains-mono" ;;
+                    "dnf") echo "jetbrains-mono-fonts" ;;
+                    "pacman") echo "ttf-jetbrains-mono" ;;
+                esac ;;
+            *) echo "$1" ;;
+        esac
+    }
+    
+    # Collect packages into array
+    packages=()
+    while IFS= read -r pkg || [ -n "$pkg" ]; do
+        # Skip comments and empty lines
+        [[ "$pkg" =~ ^[[:space:]]*# ]] && continue
+        [[ -z "${pkg// }" ]] && continue
+        packages+=("$pkg")
+    done < "$packages_file"
+    
+    # Detect package manager and install
+    if command -v apt-get &> /dev/null; then
+        echo "📦 Using apt (Debian/Ubuntu)"
+        sudo apt-get update
+        install_packages=()
+        for pkg in "${packages[@]}"; do
+            mapped=$(map_pkg "$pkg" "apt")
+            # Handle multiple packages (e.g., "gcc gcc-c++ make")
+            for p in $mapped; do
+                install_packages+=("$p")
+            done
+        done
+        sudo apt-get install -y "${install_packages[@]}"
+    
+    elif command -v dnf &> /dev/null; then
+        echo "📦 Using dnf (Fedora/RHEL)"
+        install_packages=()
+        for pkg in "${packages[@]}"; do
+            mapped=$(map_pkg "$pkg" "dnf")
+            for p in $mapped; do
+                install_packages+=("$p")
+            done
+        done
+        sudo dnf install -y "${install_packages[@]}"
+    
+    elif command -v pacman &> /dev/null; then
+        echo "📦 Using pacman (Arch Linux)"
+        install_packages=()
+        for pkg in "${packages[@]}"; do
+            mapped=$(map_pkg "$pkg" "pacman")
+            for p in $mapped; do
+                install_packages+=("$p")
+            done
+        done
+        sudo pacman -S --noconfirm "${install_packages[@]}"
+    
+    elif command -v zypper &> /dev/null; then
+        echo "📦 Using zypper (openSUSE)"
+        install_packages=()
+        for pkg in "${packages[@]}"; do
+            mapped=$(map_pkg "$pkg" "zypper")
+            for p in $mapped; do
+                install_packages+=("$p")
+            done
+        done
+        sudo zypper install -y "${install_packages[@]}"
+    
+    else
+        echo "⚠️  Unsupported package manager. Please install tools manually from ~/Packages"
+        exit 1
+    fi
+fi
+
+{{ end -}}
+
+echo "✅ Tool installation complete!"
