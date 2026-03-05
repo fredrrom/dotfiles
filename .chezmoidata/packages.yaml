@@ -1,0 +1,60 @@
+packages:
+  darwin:
+    taps:
+      - nikitabobko/tap
+    brew:
+      - git
+      - zsh
+      - fzf
+      - ripgrep
+      - fd
+      - jq
+      - neovim
+      - lua-language-server
+      - tmux
+      - uv
+      - htop
+      - nvtop
+      - zsh-vi-mode
+    cask:
+      - font-jetbrains-mono-nerd-font
+      - kitty
+      - google-chrome
+      - aerospace
+
+  linux:
+    common:
+      - git
+      - zsh
+      - fzf
+      - ripgrep
+      - jq
+      - neovim
+      - lua-language-server
+      - tmux
+      - kitty
+      - uv
+      - htop
+      - nvtop
+      - curl
+      - wget
+    apt:
+      - fd-find
+      - build-essential
+      - fonts-jetbrains-mono
+    dnf:
+      - fd-find
+      - gcc
+      - gcc-c++
+      - make
+      - jetbrains-mono-fonts
+    pacman:
+      - fd
+      - base-devel
+      - ttf-jetbrains-mono
+    zypper:
+      - fd
+      - gcc
+      - gcc-c++
+      - make
+      - fonts-jetbrains-mono

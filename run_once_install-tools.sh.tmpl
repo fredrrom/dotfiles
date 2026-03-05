@@ -16,104 +16,156 @@ if ! command -v brew &> /dev/null; then
     /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 fi
 
-# Install/update packages from Brewfile
-if [ -f ~/Brewfile ]; then
-    echo "📦 Installing packages from Brewfile..."
-    brew bundle --file=~/Brewfile 
-    echo "✅ Homebrew packages installed"
-else
-    echo "⚠️  Brewfile not found at ~/Brewfile"
+{{ $darwin := .packages.darwin }}
+brew_taps=(
+{{- range $darwin.taps }}
+  "{{ . }}"
+{{- end }}
+)
+
+brew_formulae=(
+{{- range $darwin.brew }}
+  "{{ . }}"
+{{- end }}
+)
+
+brew_casks=(
+{{- range $darwin.cask }}
+  "{{ . }}"
+{{- end }}
+)
+
+echo "📦 Installing Homebrew taps..."
+for tap in "${brew_taps[@]}"; do
+    brew tap "$tap"
+done
+
+echo "📦 Installing Homebrew formulae..."
+if [ ${#brew_formulae[@]} -gt 0 ]; then
+    brew install "${brew_formulae[@]}"
 fi
+
+echo "📦 Installing Homebrew casks..."
+if [ ${#brew_casks[@]} -gt 0 ]; then
+    brew install --cask "${brew_casks[@]}"
+fi
+
+echo "✅ Homebrew packages installed"
 
 {{ else if eq .chezmoi.os "linux" -}}
 # Linux installation
 echo "🐧 Detected Linux - detecting package manager..."
 
-packages_file=~/Packages
+{{ $linux := .packages.linux }}
+linux_common=(
+{{- range $linux.common }}
+  "{{ . }}"
+{{- end }}
+)
 
-if [ ! -f "$packages_file" ]; then
-    echo "⚠️  Packages file not found at $packages_file"
-else
-    # Simple package name mapping for distro differences
-    map_pkg() {
-        case "$1" in
-            "fd") [[ "$2" == "apt" || "$2" == "dnf" ]] && echo "fd-find" || echo "fd" ;;
-            "build-essential")
-                case "$2" in
-                    "apt") echo "build-essential" ;;
-                    "dnf"|"zypper") echo "gcc gcc-c++ make" ;;
-                    "pacman") echo "base-devel" ;;
-                esac ;;
-            "fonts-jetbrains-mono")
-                case "$2" in
-                    "apt"|"zypper") echo "fonts-jetbrains-mono" ;;
-                    "dnf") echo "jetbrains-mono-fonts" ;;
-                    "pacman") echo "ttf-jetbrains-mono" ;;
-                esac ;;
-            *) echo "$1" ;;
+filter_available_packages() {
+    local manager="$1"
+    shift
+    local installable=()
+    local skipped=()
+
+    for pkg in "$@"; do
+        case "$manager" in
+            apt)
+                if apt-cache show "$pkg" >/dev/null 2>&1; then
+                    installable+=("$pkg")
+                else
+                    skipped+=("$pkg")
+                fi
+                ;;
+            dnf)
+                if dnf info "$pkg" >/dev/null 2>&1; then
+                    installable+=("$pkg")
+                else
+                    skipped+=("$pkg")
+                fi
+                ;;
+            pacman)
+                if pacman -Si "$pkg" >/dev/null 2>&1; then
+                    installable+=("$pkg")
+                else
+                    skipped+=("$pkg")
+                fi
+                ;;
+            zypper)
+                if zypper --non-interactive info "$pkg" >/dev/null 2>&1; then
+                    installable+=("$pkg")
+                else
+                    skipped+=("$pkg")
+                fi
+                ;;
         esac
-    }
-    
-    # Collect packages into array
-    packages=()
-    while IFS= read -r pkg || [ -n "$pkg" ]; do
-        # Skip comments and empty lines
-        [[ "$pkg" =~ ^[[:space:]]*# ]] && continue
-        [[ -z "${pkg// }" ]] && continue
-        packages+=("$pkg")
-    done < "$packages_file"
-    
-    # Detect package manager and install
-    if command -v apt-get &> /dev/null; then
-        echo "📦 Using apt (Debian/Ubuntu)"
-        sudo apt-get update
-        install_packages=()
-        for pkg in "${packages[@]}"; do
-            mapped=$(map_pkg "$pkg" "apt")
-            # Handle multiple packages (e.g., "gcc gcc-c++ make")
-            for p in $mapped; do
-                install_packages+=("$p")
-            done
-        done
-        sudo apt-get install -y "${install_packages[@]}"
-    
-    elif command -v dnf &> /dev/null; then
-        echo "📦 Using dnf (Fedora/RHEL)"
-        install_packages=()
-        for pkg in "${packages[@]}"; do
-            mapped=$(map_pkg "$pkg" "dnf")
-            for p in $mapped; do
-                install_packages+=("$p")
-            done
-        done
-        sudo dnf install -y "${install_packages[@]}"
-    
-    elif command -v pacman &> /dev/null; then
-        echo "📦 Using pacman (Arch Linux)"
-        install_packages=()
-        for pkg in "${packages[@]}"; do
-            mapped=$(map_pkg "$pkg" "pacman")
-            for p in $mapped; do
-                install_packages+=("$p")
-            done
-        done
-        sudo pacman -S --noconfirm "${install_packages[@]}"
-    
-    elif command -v zypper &> /dev/null; then
-        echo "📦 Using zypper (openSUSE)"
-        install_packages=()
-        for pkg in "${packages[@]}"; do
-            mapped=$(map_pkg "$pkg" "zypper")
-            for p in $mapped; do
-                install_packages+=("$p")
-            done
-        done
-        sudo zypper install -y "${install_packages[@]}"
-    
-    else
-        echo "⚠️  Unsupported package manager. Please install tools manually from ~/Packages"
-        exit 1
+    done
+
+    if [ ${#skipped[@]} -gt 0 ]; then
+        echo "⚠️  Skipping unavailable packages: ${skipped[*]}"
     fi
+
+    printf '%s\n' "${installable[@]}"
+}
+
+# Detect package manager and install
+if command -v apt-get &> /dev/null; then
+    echo "📦 Using apt (Debian/Ubuntu)"
+    sudo apt-get update
+    apt_packages=(
+{{- range $linux.apt }}
+      "{{ . }}"
+{{- end }}
+    )
+    all_packages=("${linux_common[@]}" "${apt_packages[@]}")
+    mapfile -t install_packages < <(filter_available_packages apt "${all_packages[@]}")
+    if [ ${#install_packages[@]} -gt 0 ]; then
+        sudo apt-get install -y "${install_packages[@]}"
+    fi
+
+elif command -v dnf &> /dev/null; then
+    echo "📦 Using dnf (Fedora/RHEL)"
+    dnf_packages=(
+{{- range $linux.dnf }}
+      "{{ . }}"
+{{- end }}
+    )
+    all_packages=("${linux_common[@]}" "${dnf_packages[@]}")
+    mapfile -t install_packages < <(filter_available_packages dnf "${all_packages[@]}")
+    if [ ${#install_packages[@]} -gt 0 ]; then
+        sudo dnf install -y "${install_packages[@]}"
+    fi
+
+elif command -v pacman &> /dev/null; then
+    echo "📦 Using pacman (Arch Linux)"
+    pacman_packages=(
+{{- range $linux.pacman }}
+      "{{ . }}"
+{{- end }}
+    )
+    all_packages=("${linux_common[@]}" "${pacman_packages[@]}")
+    mapfile -t install_packages < <(filter_available_packages pacman "${all_packages[@]}")
+    if [ ${#install_packages[@]} -gt 0 ]; then
+        sudo pacman -S --noconfirm "${install_packages[@]}"
+    fi
+
+elif command -v zypper &> /dev/null; then
+    echo "📦 Using zypper (openSUSE)"
+    zypper_packages=(
+{{- range $linux.zypper }}
+      "{{ . }}"
+{{- end }}
+    )
+    all_packages=("${linux_common[@]}" "${zypper_packages[@]}")
+    mapfile -t install_packages < <(filter_available_packages zypper "${all_packages[@]}")
+    if [ ${#install_packages[@]} -gt 0 ]; then
+        sudo zypper install -y "${install_packages[@]}"
+    fi
+
+else
+    echo "⚠️  Unsupported package manager. Install packages manually."
+    exit 1
 fi
 
 {{ end -}}
