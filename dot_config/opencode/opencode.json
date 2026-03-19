@@ -12,5 +12,21 @@
       "command": ["uvx", "ty", "server"],
       "extensions": [".py", ".pyi"]
     }
+  },
+  "mcp": {
+    "notion": {
+      "type": "remote",
+      "enabled": true,
+      "url": "https://mcp.notion.com/mcp"
+    },
+    "zotero": {
+      "type": "local",
+      "enabled": true,
+      "command": ["uvx", "--from", "zotero-mcp-server", "zotero-mcp"],
+      "environment": {
+        "ZOTERO_LOCAL": "true"
+      },
+      "timeout": 120000
+    }
   }
 }

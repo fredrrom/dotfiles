@@ -226,45 +226,5 @@ require("lazy").setup({
       vim.keymap.set("n", "<leader>gg", "<cmd>Neogit<cr>", { desc = "Neogit" })
       vim.keymap.set("n", "<leader>gd", "<cmd>DiffviewOpen<cr>", { desc = "Diffview" })
     end,
-  },
-  -- opencode (NickvanDyke)
-  {
-    "NickvanDyke/opencode.nvim",
-    dependencies = {
-      "nvim-lua/plenary.nvim",
-      { "folke/snacks.nvim", opts = { input = {}, picker = {}, terminal = {} } },
-    },
-    config = function()
-      vim.g.opencode_opts = {
-        provider = {
-          enabled = "tmux",
-        },
-      }
-
-      vim.o.autoread = true
-      local oc = require("opencode")
-
-      -- recommended core keymaps
-      vim.keymap.set({ "n", "x" }, "<C-a>", function()
-        oc.ask("@this: ", { submit = true })
-      end, { desc = "Ask opencode" })
-      vim.keymap.set({ "n", "x" }, "<C-x>", oc.select, { desc = "Execute opencode action" })
-      vim.keymap.set({ "n", "t" }, "<C-_>", oc.toggle, { desc = "Toggle opencode" })
-
-      vim.keymap.set({ "n", "x" }, "go", function()
-        return oc.operator("@this ")
-      end, { expr = true, desc = "Add range to opencode" })
-
-      vim.keymap.set("n", "goo", function()
-        return oc.operator("@this ") .. "_"
-      end, { expr = true, desc = "Add line to opencode" })
-
-      vim.keymap.set("n", "<S-C-u>", function()
-        oc.command("session.half.page.up")
-      end, { desc = "Scroll opencode up" })
-      vim.keymap.set("n", "<S-C-d>", function()
-        oc.command("session.half.page.down")
-      end, { desc = "Scroll opencode down" })
-   end,
   }
 })
