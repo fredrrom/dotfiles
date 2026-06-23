@@ -20,7 +20,16 @@ vim.opt.smartcase = true
 vim.opt.updatetime = 200
 vim.opt.timeoutlen = 300
 
+vim.opt.autoread = true
 vim.opt.clipboard = "unnamedplus"
+
+vim.api.nvim_create_autocmd({ "FocusGained", "BufEnter", "CursorHold", "CursorHoldI" }, {
+  callback = function()
+    if vim.fn.mode() ~= "c" then
+      vim.cmd("checktime")
+    end
+  end,
+})
 
 -- lsps
 vim.lsp.config("lua_ls", {
@@ -137,6 +146,19 @@ require("lazy").setup({
       ensure_installed = { "markdown", "markdown_inline", "yaml", "html", "latex" },
     },
   },
+  -- latex
+  {
+    "lervag/vimtex",
+    ft = { "tex", "bib" },
+    init = function()
+      vim.g.tex_flavor = "latex"
+      vim.g.vimtex_compiler_method = "latexmk"
+      vim.g.vimtex_view_method = "skim"
+      vim.g.vimtex_view_skim_sync = 1
+      vim.g.vimtex_view_skim_activate = 0
+      vim.g.vimtex_quickfix_mode = 0
+    end,
+  },
   -- inline markdown rendering
   {
     "MeanderingProgrammer/render-markdown.nvim",
@@ -187,6 +209,7 @@ require("lazy").setup({
     dependencies = { "nvim-tree/nvim-web-devicons" },
     opts = {
       default_file_explorer = true,
+      watch_for_changes = true,
       view_options = { show_hidden = true },
       skip_confirm_for_simple_edits = true,
       keymaps = {
