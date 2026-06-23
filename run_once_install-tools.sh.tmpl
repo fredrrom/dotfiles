@@ -1,18 +1,47 @@
 #!/bin/bash
-# Install tools on macOS and Linux
-# This script runs once when chezmoi is applied
+# Install a small set of tools without assuming sudo on Linux.
 
-set -e
+set -u
+set -o pipefail
 
-echo "🔧 Installing tools..."
+echo "Installing tools..."
+
+have() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+warn() {
+    echo "warning: $*" >&2
+}
+
+ensure_local_dirs() {
+    mkdir -p \
+        "$HOME/.local/bin" \
+        "$HOME/.local/opt" \
+        "$HOME/.local/share" \
+        "$HOME/.cache"
+}
+
+download_file() {
+    local url="$1"
+    local output="$2"
+
+    if have curl; then
+        curl -fsSL "$url" -o "$output"
+    elif have wget; then
+        wget -qO "$output" "$url"
+    else
+        warn "curl or wget is required to download $url"
+        return 1
+    fi
+}
 
 {{ if eq .chezmoi.os "darwin" -}}
-# macOS installation via Homebrew
-echo "📦 Detected macOS - using Homebrew"
+# macOS installation via Homebrew.
+echo "Detected macOS - using Homebrew"
 
-# Check if Homebrew is installed
-if ! command -v brew &> /dev/null; then
-    echo "⚠️  Homebrew not found. Installing Homebrew..."
+if ! have brew; then
+    echo "Homebrew not found. Installing Homebrew..."
     /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 fi
 
@@ -35,139 +64,191 @@ brew_casks=(
 {{- end }}
 )
 
-echo "📦 Installing Homebrew taps..."
+echo "Installing Homebrew taps..."
 for tap in "${brew_taps[@]}"; do
     brew tap "$tap"
 done
 
-echo "📦 Installing Homebrew formulae..."
+echo "Installing Homebrew formulae..."
 if [ ${#brew_formulae[@]} -gt 0 ]; then
     brew install "${brew_formulae[@]}"
 fi
 
-echo "📦 Installing Homebrew casks..."
+echo "Installing Homebrew casks..."
 if [ ${#brew_casks[@]} -gt 0 ]; then
     brew install --cask "${brew_casks[@]}"
 fi
 
-echo "✅ Homebrew packages installed"
+echo "Homebrew packages installed"
 
 {{ else if eq .chezmoi.os "linux" -}}
-# Linux installation
-echo "🐧 Detected Linux - detecting package manager..."
+echo "Detected Linux - installing missing tools under HOME"
+ensure_local_dirs
 
-{{ $linux := .packages.linux }}
-linux_common=(
-{{- range $linux.common }}
-  "{{ . }}"
-{{- end }}
-)
-
-filter_available_packages() {
-    local manager="$1"
-    shift
-    local installable=()
-    local skipped=()
-
-    for pkg in "$@"; do
-        case "$manager" in
-            apt)
-                if apt-cache show "$pkg" >/dev/null 2>&1; then
-                    installable+=("$pkg")
-                else
-                    skipped+=("$pkg")
-                fi
-                ;;
-            dnf)
-                if dnf info "$pkg" >/dev/null 2>&1; then
-                    installable+=("$pkg")
-                else
-                    skipped+=("$pkg")
-                fi
-                ;;
-            pacman)
-                if pacman -Si "$pkg" >/dev/null 2>&1; then
-                    installable+=("$pkg")
-                else
-                    skipped+=("$pkg")
-                fi
-                ;;
-            zypper)
-                if zypper --non-interactive info "$pkg" >/dev/null 2>&1; then
-                    installable+=("$pkg")
-                else
-                    skipped+=("$pkg")
-                fi
-                ;;
-        esac
-    done
-
-    if [ ${#skipped[@]} -gt 0 ]; then
-        echo "⚠️  Skipping unavailable packages: ${skipped[*]}"
+install_uv() {
+    if have uv; then
+        echo "uv already available: $(command -v uv)"
+        return 0
     fi
 
-    printf '%s\n' "${installable[@]}"
+    echo "Installing uv to $HOME/.local/bin"
+    if have curl; then
+        curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR="$HOME/.local/bin" UV_NO_MODIFY_PATH=1 sh
+    elif have wget; then
+        wget -qO- https://astral.sh/uv/install.sh | env UV_INSTALL_DIR="$HOME/.local/bin" UV_NO_MODIFY_PATH=1 sh
+    else
+        warn "curl or wget is required to install uv"
+        return 1
+    fi
 }
 
-# Detect package manager and install
-if command -v apt-get &> /dev/null; then
-    echo "📦 Using apt (Debian/Ubuntu)"
-    sudo apt-get update
-    apt_packages=(
-{{- range $linux.apt }}
-      "{{ . }}"
-{{- end }}
-    )
-    all_packages=("${linux_common[@]}" "${apt_packages[@]}")
-    mapfile -t install_packages < <(filter_available_packages apt "${all_packages[@]}")
-    if [ ${#install_packages[@]} -gt 0 ]; then
-        sudo apt-get install -y "${install_packages[@]}"
+install_fzf() {
+    local fzf_dir="$HOME/.local/opt/fzf"
+
+    if have fzf; then
+        echo "fzf already available: $(command -v fzf)"
+        return 0
     fi
 
-elif command -v dnf &> /dev/null; then
-    echo "📦 Using dnf (Fedora/RHEL)"
-    dnf_packages=(
-{{- range $linux.dnf }}
-      "{{ . }}"
-{{- end }}
-    )
-    all_packages=("${linux_common[@]}" "${dnf_packages[@]}")
-    mapfile -t install_packages < <(filter_available_packages dnf "${all_packages[@]}")
-    if [ ${#install_packages[@]} -gt 0 ]; then
-        sudo dnf install -y "${install_packages[@]}"
+    if ! have git; then
+        warn "git is required to install fzf"
+        return 1
     fi
 
-elif command -v pacman &> /dev/null; then
-    echo "📦 Using pacman (Arch Linux)"
-    pacman_packages=(
-{{- range $linux.pacman }}
-      "{{ . }}"
-{{- end }}
-    )
-    all_packages=("${linux_common[@]}" "${pacman_packages[@]}")
-    mapfile -t install_packages < <(filter_available_packages pacman "${all_packages[@]}")
-    if [ ${#install_packages[@]} -gt 0 ]; then
-        sudo pacman -S --noconfirm "${install_packages[@]}"
+    echo "Installing fzf to $fzf_dir"
+    if [ ! -d "$fzf_dir/.git" ]; then
+        if [ -e "$fzf_dir" ]; then
+            warn "$fzf_dir exists but is not a git checkout; skipping fzf install"
+            return 1
+        fi
+        git clone --depth 1 https://github.com/junegunn/fzf.git "$fzf_dir" || return 1
     fi
 
-elif command -v zypper &> /dev/null; then
-    echo "📦 Using zypper (openSUSE)"
-    zypper_packages=(
-{{- range $linux.zypper }}
-      "{{ . }}"
-{{- end }}
-    )
-    all_packages=("${linux_common[@]}" "${zypper_packages[@]}")
-    mapfile -t install_packages < <(filter_available_packages zypper "${all_packages[@]}")
-    if [ ${#install_packages[@]} -gt 0 ]; then
-        sudo zypper install -y "${install_packages[@]}"
+    "$fzf_dir/install" --bin --no-update-rc || return 1
+    ln -sfn "$fzf_dir/bin/fzf" "$HOME/.local/bin/fzf" || return 1
+}
+
+install_nvim() {
+    local arch
+    local archive
+    local extracted_dir
+    local tmp_dir
+
+    if have nvim; then
+        echo "nvim already available: $(command -v nvim)"
+        return 0
     fi
 
-else
-    echo "⚠️  Unsupported package manager. Install packages manually."
-    exit 1
-fi
+    case "$(uname -m)" in
+        x86_64|amd64)
+            arch="x86_64"
+            ;;
+        aarch64|arm64)
+            arch="arm64"
+            ;;
+        *)
+            warn "unsupported architecture for Neovim prebuilt archive: $(uname -m)"
+            return 1
+            ;;
+    esac
+
+    archive="nvim-linux-${arch}.tar.gz"
+    extracted_dir="$HOME/.local/opt/nvim-linux-${arch}"
+    tmp_dir="$(mktemp -d)" || return 1
+
+    echo "Installing nvim to $HOME/.local/opt/nvim"
+    if ! download_file "https://github.com/neovim/neovim/releases/latest/download/${archive}" "$tmp_dir/$archive"; then
+        rm -rf "$tmp_dir"
+        return 1
+    fi
+
+    rm -rf "$extracted_dir" "$HOME/.local/opt/nvim"
+    if ! tar -xzf "$tmp_dir/$archive" -C "$HOME/.local/opt"; then
+        rm -rf "$tmp_dir"
+        return 1
+    fi
+    if [ ! -x "$extracted_dir/bin/nvim" ]; then
+        warn "Neovim archive did not contain expected binary: $extracted_dir/bin/nvim"
+        rm -rf "$tmp_dir"
+        return 1
+    fi
+    ln -sfn "$extracted_dir" "$HOME/.local/opt/nvim" || {
+        rm -rf "$tmp_dir"
+        return 1
+    }
+    ln -sfn "$HOME/.local/opt/nvim/bin/nvim" "$HOME/.local/bin/nvim" || {
+        rm -rf "$tmp_dir"
+        return 1
+    }
+    rm -rf "$tmp_dir"
+}
+
+install_zsh_plugins() {
+    local plugin_dir="${XDG_DATA_HOME:-$HOME/.local/share}/zsh/plugins"
+    local status=0
+
+    if ! have git; then
+        warn "git is required to install Zsh plugins"
+        return 1
+    fi
+
+    mkdir -p "$plugin_dir"
+
+    install_plugin() {
+        local name="$1"
+        local url="$2"
+        local marker="$3"
+        local target="$plugin_dir/$name"
+
+        if [ -r "$target/$marker" ]; then
+            echo "$name already available: $target"
+            return 0
+        fi
+
+        echo "Installing $name to $target"
+        if [ -e "$target" ]; then
+            warn "$target exists but does not contain $marker; skipping"
+            return 1
+        fi
+        git clone --depth 1 "$url" "$target" || return 1
+    }
+
+    install_plugin \
+        zsh-autosuggestions \
+        https://github.com/zsh-users/zsh-autosuggestions.git \
+        zsh-autosuggestions.zsh || status=1
+
+    install_plugin \
+        zsh-syntax-highlighting \
+        https://github.com/zsh-users/zsh-syntax-highlighting.git \
+        zsh-syntax-highlighting.zsh || status=1
+
+    install_plugin \
+        fzf-tab \
+        https://github.com/Aloxaf/fzf-tab.git \
+        fzf-tab.plugin.zsh || status=1
+
+    return "$status"
+}
+
+for installer in install_uv install_fzf install_nvim install_zsh_plugins; do
+    if "$installer"; then
+        echo "$installer complete"
+    else
+        warn "$installer failed; continuing"
+    fi
+done
+
+echo
+echo "Tool status:"
+for tool in uv uvx fzf nvim git zsh tmux rg fd jq; do
+    if have "$tool"; then
+        echo "  $tool: $(command -v "$tool")"
+    else
+        echo "  $tool: missing"
+    fi
+done
 
 {{ end -}}
 
-echo "✅ Tool installation complete!"
+echo "Tool installation complete"

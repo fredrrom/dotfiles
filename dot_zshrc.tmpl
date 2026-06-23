@@ -1,3 +1,5 @@
+export PATH="$HOME/.local/bin:$HOME/.opencode/bin:$HOME/.local/npm-global/bin:$PATH"
+
 # ---------- History / keys ----------
 HISTFILE=~/.histfile
 HISTSIZE=10000
@@ -11,77 +13,103 @@ compinit
 zstyle ':completion:*' menu select
 zstyle ':completion:*' matcher-list 'm:{a-zA-Z}={A-Za-z}'
 
-# ---------- zinit ----------
-ZINIT_HOME="${XDG_DATA_HOME:-${HOME}/.local/share}/zinit/zinit.git"
-[ ! -d $ZINIT_HOME ] && mkdir -p "$(dirname $ZINIT_HOME)"
-[ ! -d $ZINIT_HOME/.git ] && git clone https://github.com/zdharma-continuum/zinit.git "$ZINIT_HOME"
-source "${ZINIT_HOME}/zinit.zsh"
-autoload -Uz _zinit
-(( ${+_comps} )) && _comps[zinit]=_zinit
-zinit light zsh-users/zsh-autosuggestions
-zinit light zsh-users/zsh-syntax-highlighting
-zinit light Aloxaf/fzf-tab
+# ---------- Zsh plugins ----------
+ZSH_PLUGIN_DIR="${XDG_DATA_HOME:-${HOME}/.local/share}/zsh/plugins"
+[[ -r "$ZSH_PLUGIN_DIR/fzf-tab/fzf-tab.plugin.zsh" ]] && source "$ZSH_PLUGIN_DIR/fzf-tab/fzf-tab.plugin.zsh"
+[[ -r "$ZSH_PLUGIN_DIR/zsh-autosuggestions/zsh-autosuggestions.zsh" ]] && source "$ZSH_PLUGIN_DIR/zsh-autosuggestions/zsh-autosuggestions.zsh"
+[[ -r "$ZSH_PLUGIN_DIR/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" ]] && source "$ZSH_PLUGIN_DIR/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"
+unset ZSH_PLUGIN_DIR
 
 # ---------- OS-specific ----------
-{{ if eq .chezmoi.os "darwin" }}
-# fzf (Homebrew default)
-source "$(brew --prefix)/opt/fzf/shell/key-bindings.zsh"
-source "$(brew --prefix)/opt/fzf/shell/completion.zsh"
-{{ else if eq .chezmoi.os "linux" }}
-# fzf (system)
-source /usr/share/fzf/key-bindings.zsh
-source /usr/share/fzf/completion.zsh
+{{ if eq .chezmoi.os "linux" }}
 # SSH agent socket
 export SSH_AUTH_SOCK="${XDG_RUNTIME_DIR:-/run/user/$UID}/ssh-agent.socket"
-. "$HOME/.local/bin/env"
+[[ -r "$HOME/.local/bin/env" ]] && source "$HOME/.local/bin/env"
 {{ end }}
-export FZF_DEFAULT_COMMAND='fd --hidden --follow --exclude .git'
-export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
-export FZF_ALT_C_COMMAND='fd --type d --hidden --follow --exclude .git'
+
+if command -v fzf >/dev/null 2>&1; then
+  if fzf --zsh >/dev/null 2>&1; then
+    source <(fzf --zsh)
+  else
+    for fzf_file in \
+      /usr/share/fzf/key-bindings.zsh \
+      /usr/share/fzf/completion.zsh \
+      /opt/homebrew/opt/fzf/shell/key-bindings.zsh \
+      /opt/homebrew/opt/fzf/shell/completion.zsh \
+      /usr/local/opt/fzf/shell/key-bindings.zsh \
+      /usr/local/opt/fzf/shell/completion.zsh \
+      "$HOME/.local/opt/fzf/shell/key-bindings.zsh" \
+      "$HOME/.local/opt/fzf/shell/completion.zsh"; do
+      [[ -r "$fzf_file" ]] && source "$fzf_file"
+    done
+    unset fzf_file
+  fi
+fi
+
+if command -v fd >/dev/null 2>&1; then
+  FD_COMMAND=fd
+elif command -v fdfind >/dev/null 2>&1; then
+  FD_COMMAND=fdfind
+fi
+
+if [[ -n "${FD_COMMAND:-}" ]]; then
+  export FZF_DEFAULT_COMMAND="$FD_COMMAND --hidden --follow --exclude .git"
+  export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
+  export FZF_ALT_C_COMMAND="$FD_COMMAND --type d --hidden --follow --exclude .git"
+fi
 
 # ---------- Useful defaults ----------
 export EDITOR=nvim
-alias grep="rg"
+if command -v rg >/dev/null 2>&1; then
+  alias grep="rg"
+fi
 
 # ---------- functions ----------
 # fcd: fuzzy cd
 fcd() {
+  local fd_cmd="${FD_COMMAND:-fd}"
   local dir
-  dir=$(fd -t d . ${1:-.} | fzf) || return
+  command -v "$fd_cmd" >/dev/null 2>&1 && command -v fzf >/dev/null 2>&1 || return 127
+  dir=$("$fd_cmd" -t d . "${1:-.}" | fzf) || return
   cd "$dir"
 }
 
 # v: open a file from cwd
 v() {
-local f
-f="$(fd --type f --hidden --exclude .git | fzf)"
-[[ -n "$f" ]] && nvim "$f"
+  local fd_cmd="${FD_COMMAND:-fd}"
+  local f
+  command -v "$fd_cmd" >/dev/null 2>&1 && command -v fzf >/dev/null 2>&1 || return 127
+  f="$("$fd_cmd" --type f --hidden --exclude .git | fzf)"
+  [[ -n "$f" ]] && nvim "$f"
 }
 
 
 # cf: open a config file (~/.config + top-level dotfiles)
 cf() {
-local f
-f="$(
-fd --type f --hidden --exclude .git . "${XDG_CONFIG_HOME:-$HOME/.config}" \
-| sed "s|^$HOME/|~/|" \
-| fzf
-)"
-[[ -n "$f" ]] && nvim "${f/#\~/$HOME}"
+  local fd_cmd="${FD_COMMAND:-fd}"
+  local f
+  command -v "$fd_cmd" >/dev/null 2>&1 && command -v fzf >/dev/null 2>&1 || return 127
+  f="$(
+    "$fd_cmd" --type f --hidden --exclude .git . "${XDG_CONFIG_HOME:-$HOME/.config}" \
+    | sed "s|^$HOME/|~/|" \
+    | fzf
+  )"
+  [[ -n "$f" ]] && nvim "${f/#\~/$HOME}"
 }
 
 
 # vg: grep -> open at line
 vg() {
-local sel file line
-sel="$(rg --line-number --no-heading --smart-case "$*" | fzf)" || return
-file="${sel%%:*}"
-line="${sel#*:}"; line="${line%%:*}"
-nvim +"$line" "$file"
+  local sel file line
+  command -v rg >/dev/null 2>&1 && command -v fzf >/dev/null 2>&1 || return 127
+  sel="$(rg --line-number --no-heading --smart-case "$*" | fzf)" || return
+  file="${sel%%:*}"
+  line="${sel#*:}"; line="${line%%:*}"
+  nvim +"$line" "$file"
 }
 
 # ---------- tmux ----------
-if [[ -z "$TMUX" && -n "$PS1" ]]; then
+if [[ -z "$TMUX" && -n "$PS1" ]] && command -v tmux >/dev/null 2>&1; then
   if tmux ls >/dev/null 2>&1; then
     tmux attach \; choose-tree -Zs
   else
@@ -89,16 +117,9 @@ if [[ -z "$TMUX" && -n "$PS1" ]]; then
   fi
 fi
 
-. "$HOME/.local/bin/env"
+[[ -r "$HOME/.local/bin/env" ]] && source "$HOME/.local/bin/env"
 
 # lean
 if [[ -f "$HOME/.elan/env" ]]; then
   source "$HOME/.elan/env"
 fi
-
-# opencode
-export PATH="$HOME/.opencode/bin:$PATH"
-export PATH="$HOME/.local/bin:$PATH"
-
-# npm
-export PATH="$HOME/.local/npm-global/bin:$PATH"
