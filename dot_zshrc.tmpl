@@ -1,5 +1,10 @@
 export PATH="$HOME/.local/bin:$HOME/.opencode/bin:$HOME/.local/npm-global/bin:$PATH"
 
+# Fall back when Kitty is connected to a host without Kitty terminfo.
+if [[ "${TERM:-}" == "xterm-kitty" ]] && { ! command -v infocmp >/dev/null 2>&1 || ! infocmp xterm-kitty >/dev/null 2>&1; }; then
+  export TERM=xterm-256color
+fi
+
 # ---------- History / keys ----------
 HISTFILE=~/.histfile
 HISTSIZE=10000
